@@ -1,0 +1,307 @@
+{
+ "cells": [
+  {
+   "cell_type": "code",
+   "execution_count": 14,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "import tensorflow as tf"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 15,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Don't pay attention to this\n",
+    "# This is to keep kernel from dying\n",
+    "import os\n",
+    "os.environ['KMP_DUPLICATE_LIB_OK']='True'"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 16,
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Extracting MNIST_data/train-images-idx3-ubyte.gz\n",
+      "Extracting MNIST_data/train-labels-idx1-ubyte.gz\n",
+      "Extracting MNIST_data/t10k-images-idx3-ubyte.gz\n",
+      "Extracting MNIST_data/t10k-labels-idx1-ubyte.gz\n"
+     ]
+    }
+   ],
+   "source": [
+    "from tensorflow.examples.tutorials.mnist import input_data\n",
+    "mnist = input_data.read_data_sets(\"MNIST_data/\", one_hot = True)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 17,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Specifying layers \n",
+    "input_width = 28\n",
+    "input_hight = 28\n",
+    "input_channels = 1\n",
+    "input_pixels = 784\n",
+    "\n",
+    "n_conv1 = 32\n",
+    "n_conv2 = 64\n",
+    "stride_conv1 = 1\n",
+    "stride_conv2 = 1\n",
+    "conv1_k = 5\n",
+    "conv2_k = 5\n",
+    "max_pool1_k = 2\n",
+    "max_pool2_k = 2\n",
+    "\n",
+    "n_hidden = 1024\n",
+    "input_size_to_hidden = (input_width//(max_pool1_k*max_pool2_k)) * (input_hight//(max_pool1_k*max_pool2_k)) * n_conv2\n",
+    "\n",
+    "n_out = 10"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 18,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Specifying weights and biases\n",
+    "\n",
+    "weights = {\n",
+    "    'wc1' : tf.Variable(tf.random_normal([conv1_k,conv1_k,input_channels,n_conv1])),\n",
+    "    'wc2' : tf.Variable(tf.random_normal([conv2_k,conv2_k,n_conv1,n_conv2])),\n",
+    "    'wh1' : tf.Variable(tf.random_normal([input_size_to_hidden,n_hidden])),\n",
+    "    'wo'  : tf.Variable(tf.random_normal([n_hidden,n_out]))\n",
+    "}\n",
+    "\n",
+    "biases = {\n",
+    "    'bc1' : tf.Variable(tf.random_normal([n_conv1])),\n",
+    "    'bc2' : tf.Variable(tf.random_normal([n_conv2])),\n",
+    "    'bh1' : tf.Variable(tf.random_normal([n_hidden])),\n",
+    "    'bo'  : tf.Variable(tf.random_normal([n_out]))\n",
+    "}"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 19,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "#define convulation and maxpooling function\n",
+    "def conv(x,weights,bias,stride = 1):\n",
+    "    out = tf.nn.conv2d(x,weights,padding = 'SAME',strides = [1,stride,stride,1])\n",
+    "    out = tf.nn.bias_add(out,bias)\n",
+    "    out = tf.nn.relu(out)\n",
+    "    return out\n",
+    "\n",
+    "def maxpooling(x,k = 2):\n",
+    "    return tf.nn.max_pool(x,padding = 'SAME',ksize = [1,k,k,1],strides = [1,k,k,1])"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 20,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Apply Forward propogation\n",
+    "def cnn(x,weights,biases,keep_prob = 1):\n",
+    "    x = tf.reshape(x,shape = [-1,input_hight,input_width,input_channels]) #convert in image form\n",
+    "    conv1 = conv(x,weights['wc1'],biases['bc1'],stride_conv1)\n",
+    "    conv1_pool = maxpooling(conv1,max_pool1_k)\n",
+    "    \n",
+    "    conv2 = conv(conv1_pool,weights['wc2'],biases['bc2'],stride_conv2)\n",
+    "    conv2_pool = maxpooling(conv2,max_pool2_k)\n",
+    "    \n",
+    "    hidden_input = tf.reshape(conv2_pool,shape = [-1,input_size_to_hidden])\n",
+    "    hidden_output_before_activation = tf.add(tf.matmul(hidden_input,weights['wh1']),biases['bh1'])\n",
+    "    hidden_output_before_dropout = tf.nn.relu(hidden_output_before_activation)#We are applying relu function here\n",
+    "    hidden_output = tf.nn.dropout(hidden_output_before_dropout,keep_prob)\n",
+    "    \n",
+    "    output = tf.add(tf.matmul(hidden_output,weights['wo']),biases['bo']) #output - not using any activation function\n",
+    "    return output"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 21,
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "WARNING:tensorflow:From <ipython-input-20-81dce1dc11d9>:13: calling dropout (from tensorflow.python.ops.nn_ops) with keep_prob is deprecated and will be removed in a future version.\n",
+      "Instructions for updating:\n",
+      "Please use `rate` instead of `keep_prob`. Rate should be set to `rate = 1 - keep_prob`.\n"
+     ]
+    }
+   ],
+   "source": [
+    "x = tf.placeholder('float',[None,input_pixels])\n",
+    "y = tf.placeholder(tf.int32,[None,n_out])\n",
+    "# keep_prob for dropout layer is passed while running session\n",
+    "# So during training it will have some value but while testing it will be '1' because we cannot skip testing points.\n",
+    "keep_prob = tf.placeholder('float')\n",
+    "pred = cnn(x,weights,biases,keep_prob)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 22,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(logits = pred,labels = y))"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 23,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "optimizer = tf.train.AdamOptimizer(learning_rate = 0.01)\n",
+    "optimize = optimizer.minimize(cost)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 24,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "sess = tf.Session()\n",
+    "sess.run(tf.global_variables_initializer())"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 25,
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "809546.7266874313\n",
+      "31952.96971899271\n",
+      "18229.327535897195\n",
+      "12535.563260293813\n",
+      "10743.203609883802\n",
+      "8149.192387132483\n",
+      "6465.450631989916\n",
+      "6394.637245333931\n",
+      "7288.648941778218\n",
+      "5667.759094004623\n",
+      "5514.0419691353645\n",
+      "5163.863319731998\n",
+      "4115.583173603622\n",
+      "4375.620708920649\n",
+      "3887.911950465663\n",
+      "2306.1563947392415\n",
+      "3122.6733134309047\n",
+      "3332.3475158519545\n",
+      "3408.932162801866\n",
+      "2543.9215090708194\n",
+      "2567.1881970087943\n",
+      "2258.5875924351185\n",
+      "2275.1566278657283\n",
+      "2389.116603827989\n",
+      "2689.104256555986\n",
+      "2488.4312770035367\n",
+      "1999.76354569831\n",
+      "1116.1376946646137\n",
+      "2058.786820777645\n",
+      "2513.8385781593115\n"
+     ]
+    }
+   ],
+   "source": [
+    "# Taking batch size of 100 for 55000 training data points\n",
+    "batch_size = 100\n",
+    "for iter in range(30):\n",
+    "    num_batches = int(mnist.train.num_examples/batch_size) # num_examples give no. of data points in train/test\n",
+    "    total_cost = 0\n",
+    "    for j in range(num_batches):\n",
+    "        x_batch,y_batch = mnist.train.next_batch(batch_size)\n",
+    "        c,_ = sess.run([cost,optimize],feed_dict = {x : x_batch,y : y_batch,keep_prob : 0.8})\n",
+    "        total_cost += c\n",
+    "    print(total_cost)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 26,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "predictions = tf.argmax(pred,1) # Find index of column with maximum value for each row\n",
+    "true_labels = tf.argmax(y,1)  # Find actual labels\n",
+    "correct_predictions = tf.equal(predictions,true_labels) # True value corresponding to equal match\n",
+    "pred_eval,correct_pred = sess.run([predictions,correct_predictions],feed_dict = {x:mnist.test.images\n",
+    "                                                                            ,y:mnist.test.labels,keep_prob : 1.0})"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 27,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "98.64"
+      ]
+     },
+     "execution_count": 27,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "# percentage of prediction accuracy\n",
+    "(correct_pred.sum()/10000) * 100 "
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## We are getting 98.64% testing accuracy"
+   ]
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "Python 3",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.7.3"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 2
+}

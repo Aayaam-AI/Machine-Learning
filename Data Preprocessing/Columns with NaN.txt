@@ -1,0 +1,12 @@
+cols_with_NaN_values = [col for col in X_train.columns
+                     if X_train[col].isnull().any()]
+
+
+
+# Number of missing values in each column of training data
+missing_val_count_by_column = (X_train.isnull().sum())
+
+
+
+
+
